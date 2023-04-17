@@ -15,6 +15,13 @@ TaskID = str
 class TaskNotFoundError(RuntimeError):
     pass
 
+class TaskCanceledError(RuntimeError):
+    pass
+
+class TaskFailedError(RuntimeError):
+    pass
+
+
 class State(Enum):
     def __new__(cls, value, is_final=False):
         self = object.__new__(cls)
@@ -203,9 +210,9 @@ class Beef:
 
             status = _message_to_status(msg)
             if status.state == State.CANCELED:
-                raise RuntimeError(f'task {task_id} was canceled with message {status.body}')
+                raise TaskCanceledError(f'task {task_id} was canceled with message {status.body}')
             if status.state == State.FAILURE:
-                raise RuntimeError(f'task {task_id} failed with remote exception {status.body}')
+                raise TaskFailedError(f'task {task_id} failed with remote exception {status.body}')
             if status.state == State.SUCCESS:
                 return status.body
             raise RuntimeError(f'Unexpected final state {status}')
@@ -221,10 +228,9 @@ class Beef:
             queue = await channel.declare_queue(self.name, durable=True)
             async with queue.iterator(no_ack=False) as queue_iter:
                 async for msg in queue_iter:
-                    task_id, av, kw = _message_to_work_request(msg)
-                    self._task_id.set(task_id)
-                    print(f'Invoking {task_id} with {av}, {kw}')
                     try:
+                        task_id, av, kw = _message_to_work_request(msg)
+                        self._task_id.set(task_id)
                         result = await self.fn(*av, **kw)
                         status = Status.success(task_id=task_id, result=result)
                     except Exception as e:
@@ -236,7 +242,6 @@ class Beef:
 
                     await self._set_status(channel, status)
                     await msg.ack()
-                print('Server completed')
 
     @contextlib.asynccontextmanager
     async def connect(self, url: str, max_channels=10) -> aio_pika.pool.Pool:

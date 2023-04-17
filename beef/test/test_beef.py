@@ -1,7 +1,7 @@
-from beef import beef
+from beef import beef, State
 import pytest
 import asyncio
-from beef.test.sample_workers import addition, multiplication, short_lived
+from beef.test.sample_workers import addition, multiplication, short_lived, universal
 import contextlib
 
 @contextlib.asynccontextmanager
@@ -31,6 +31,14 @@ async def multiplication_server():
 async def short_lived_server():
     async with server(short_lived):
         yield
+
+@pytest.fixture(scope='function')
+async def universal_server():
+    async with server(universal):
+        try:
+            yield
+        finally:
+            await asyncio.sleep(2.0)  # give it chance to finish workers
 
 async def test_beef():
     with pytest.raises(ValueError, match='beef can only wrap async functions'):
@@ -100,3 +108,47 @@ async def test_short_lived_expires(short_lived_server):
     async with short_lived.connect(url='amqp://localhost/'):
         with pytest.raises(RuntimeError, match='Task .+ not found'):
             await short_lived.result(task_id=task_id)
+
+async def test_final_status_persists(universal_server):
+    # here queue does expire, because we connect to the sever after task reply timeout
+    async with universal.connect(url='amqp://localhost/'):
+        task_id = await universal.submit(ret=1)
+
+    await asyncio.sleep(0.2)
+    async with universal.connect(url='amqp://localhost/'):
+        status = await universal.get_status(task_id=task_id)
+        assert status.is_final
+        assert status.state == State.SUCCESS
+        assert status.body == 1
+
+    # check that final success state is still there
+    await asyncio.sleep(2.5)
+    async with universal.connect(url='amqp://localhost/'):
+        status = await universal.get_status(task_id=task_id)
+        assert status.is_final
+        assert status.state == State.SUCCESS
+        assert status.body == 1
+
+async def test_canceled(universal_server):
+    # here queue does expire, because we connect to the sever after task reply timeout
+    async with universal.connect(url='amqp://localhost/'):
+        task_id = await universal.submit(ret=1, delay=1.0)
+
+    await asyncio.sleep(0.1)
+    async with universal.connect(url='amqp://localhost/'):
+        status = await universal.get_status(task_id=task_id)
+        assert not status.is_final
+        assert status.state == State.WORKING
+
+    await asyncio.sleep(0.1)
+    async with universal.connect(url='amqp://localhost/'):
+        await universal.cancel(task_id=task_id, message='go away, we do not need you')
+
+    await asyncio.sleep(0.1)
+    async with universal.connect(url='amqp://localhost/'):
+        status = await universal.get_status(task_id=task_id)
+        assert status.is_final
+        assert status.state == State.CANCELED
+        assert status.body == 'go away, we do not need you'
+
+    await asyncio.sleep(1.0)  # let the worker finish

@@ -17,3 +17,10 @@ async def short_lived(*, delay=None, exception=None, ret=None):
         raise exception
     return ret
 
+@beef
+async def universal(*, delay=None, exception=None, ret=None):
+    if delay is not None:
+        await asyncio.sleep(delay)
+    if exception is not None:
+        raise exception
+    return ret

@@ -1,4 +1,14 @@
-from .beef import beef, State, Status, DEFAULT_REPLY_EXPIRATION_MILLIS, TaskID, TaskNotFoundError
+from .beef import (
+    beef,
+    State,
+    Status,
+    DEFAULT_REPLY_EXPIRATION_MILLIS,
+    TaskID,
+    TaskNotFoundError,
+    TaskCanceledError,
+    TaskFailedError,
+)
+
 __all__ = [
     'beef',
     'State',
@@ -6,4 +16,6 @@ __all__ = [
     'DEFAULT_REPLY_EXPIRATION_MILLIS',
     'TaskID',
     'TaskNotFoundError',
+    'TaskCanceledError',
+    'TaskFailedError',
 ]
