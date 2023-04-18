@@ -8,6 +8,7 @@ import json
 from typing import Callable, Awaitable, Any, Optional, NoReturn, Tuple, List, Dict
 import aio_pika
 import aiormq
+from .pool import Pool
 
 AsyncFunction = Callable[..., Awaitable[Any]]
 TaskID = str
@@ -244,13 +245,13 @@ class Beef:
                     await msg.ack()
 
     @contextlib.asynccontextmanager
-    async def connect(self, url: str, max_channels=10) -> aio_pika.pool.Pool:
+    async def connect(self, url: str, max_channels=10) -> Pool:
         '''
         Opens a (single) connection to AMQP server at :url: and creates a pool of channels
         '''
         connection = await aio_pika.connect_robust(url)
         async with connection:
-            pool = aio_pika.pool.Pool(connection.channel, max_size=max_channels)
+            pool = Pool(connection, max_items=max_channels)
             async with pool:
                 self._pool.set(pool)
                 try:
