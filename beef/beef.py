@@ -249,7 +249,7 @@ class Beef:
         '''
         Opens a (single) connection to AMQP server at :url: and creates a pool of channels
         '''
-        connection = await aio_pika.connect_robust(url)
+        connection = await aio_pika.connect(url)
         async with connection:
             pool = Pool(connection, max_items=max_channels)
             async with pool:
