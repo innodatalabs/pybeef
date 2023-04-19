@@ -8,6 +8,8 @@ import json
 from typing import Callable, Awaitable, Any, Optional, NoReturn, Tuple, List, Dict
 import aio_pika
 import aiormq
+import sys
+import asyncio
 from .pool import Pool
 
 AsyncFunction = Callable[..., Awaitable[Any]]
@@ -130,7 +132,6 @@ class Beef:
             await channel.declare_queue(self.name, durable=True)
             task_id = str(uuid.uuid4())
             await channel.declare_queue(task_id, durable=True, arguments={'x-expires': self._reply_expiration_millis})
-            print(f'Declared reply queue {task_id} with idle exporation of {self._reply_expiration_millis}')
             await self._set_status(channel, Status.progress(task_id=task_id, steps=0, progress=-1))
             await channel.default_exchange.publish(
                 _work_request_to_message(task_id, *av, **kw),
@@ -227,25 +228,31 @@ class Beef:
 
         This call block forever, waiting for incoming requests.
         '''
-        async with self._acquire_channel() as channel:
-            await channel.set_qos(prefetch_count=1)
-            queue = await channel.declare_queue(self.name, durable=True)
-            async with queue.iterator(no_ack=False) as queue_iter:
-                async for msg in queue_iter:
-                    try:
-                        task_id, av, kw = _message_to_work_request(msg)
-                        self._task_id.set(task_id)
-                        result = await self.fn(*av, **kw)
-                        status = Status.success(task_id=task_id, result=result)
-                    except Exception as e:
-                        import traceback
-                        traceback.print_exc()
-                        status = Status.failure(task_id=task_id, error=repr(e))
-                    finally:
-                        self._task_id.set(None)
+        while True:
+            with contextlib.suppress(asyncio.TimeoutError):
+                # need this loop with timeout and suppressed TimeoutError, because
+                # queue iterator does not exit on connection/channel close
+                # we want this loop to break if connection to AMQP server is lost, hence
+                # the looping with timeout hack
+                async with self._acquire_channel() as channel:
+                    await channel.set_qos(prefetch_count=1)
+                    queue = await channel.declare_queue(self.name, durable=True)
+                    async with queue.iterator(no_ack=False, timeout=10) as queue_iter:
+                        async for msg in queue_iter:
+                            try:
+                                task_id, av, kw = _message_to_work_request(msg)
+                                self._task_id.set(task_id)
+                                result = await self.fn(*av, **kw)
+                                status = Status.success(task_id=task_id, result=result)
+                            except Exception as e:
+                                import traceback
+                                traceback.print_exc(file=sys.stderr)
+                                status = Status.failure(task_id=task_id, error=repr(e))
+                            finally:
+                                self._task_id.set(None)
 
-                    await self._set_status(channel, status)
-                    await msg.ack()
+                            await self._set_status(channel, status)
+                            await msg.ack()
 
     @contextlib.asynccontextmanager
     async def connect(self, url: str, max_channels=10) -> Pool:
