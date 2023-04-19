@@ -130,6 +130,7 @@ class Beef:
             await channel.declare_queue(self.name, durable=True)
             task_id = str(uuid.uuid4())
             await channel.declare_queue(task_id, durable=True, arguments={'x-expires': self._reply_expiration_millis})
+            print(f'Declared reply queue {task_id} with idle exporation of {self._reply_expiration_millis}')
             await self._set_status(channel, Status.progress(task_id=task_id, steps=0, progress=-1))
             await channel.default_exchange.publish(
                 _work_request_to_message(task_id, *av, **kw),
@@ -161,6 +162,7 @@ class Beef:
             if last is None:
                 raise TaskNotFoundError(f'task {task_id} not found')
 
+            await last.nack()
             return _message_to_status(last)
 
     async def set_progress(self, *, task_id: Optional[TaskID] = None, steps: int, progress: int = 0, message: Optional[str] = None) -> None:
@@ -207,6 +209,7 @@ class Beef:
                         await last.ack()
                     last = msg
                     if msg.headers.get('x-state') in FINAL_STATES:
+                        await msg.nack()
                         break
 
             status = _message_to_status(msg)
