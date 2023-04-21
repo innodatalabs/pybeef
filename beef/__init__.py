@@ -8,6 +8,7 @@ from .beef import (
     TaskCanceledError,
     TaskFailedError,
 )
+from .pool import Pool
 
 __all__ = [
     'beef',
@@ -18,4 +19,5 @@ __all__ = [
     'TaskNotFoundError',
     'TaskCanceledError',
     'TaskFailedError',
+    'Pool',
 ]

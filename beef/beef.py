@@ -263,11 +263,27 @@ class Beef:
         async with connection:
             pool = Pool(connection, max_items=max_channels)
             async with pool:
-                self._pool.set(pool)
-                try:
+                async with self.pool(pool):
                     yield pool
-                finally:
-                    self._pool.set(None)
+
+    @contextlib.asynccontextmanager
+    async def pool(self, pool: Pool) -> None:
+        '''
+        Uses external connection pool. Can be used to share a single connection among several workers.
+
+        Example:
+        connection = await aio_pika.connect(url)
+        async with connection:
+            pool = Pool(connection, max_items=max_channels)
+
+        '''
+        if self._pool.get(None) is not None:
+            raise RuntimeError('Connection context is already present')
+        self._pool.set(pool)
+        try:
+            yield pool
+        finally:
+            self._pool.set(None)
 
     @contextlib.asynccontextmanager
     async def _acquire_channel(self) -> aio_pika.abc.AbstractRobustChannel:
