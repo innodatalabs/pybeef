@@ -5,6 +5,7 @@ Beef is good for your health.
 An opinionated distributed RPC using AMQP messages (inspired by celery amqp backend).
 
 ## Installing
+
 ```bash
 pip install pybeef
 ```
@@ -12,6 +13,7 @@ pip install pybeef
 ## Usage
 
 Worker:
+
 ```python
 from beef import beef
 
@@ -21,6 +23,7 @@ async def add(x: int, y: int) -> int:
 ```
 
 Server:
+
 ```python
 async def server():
     async with add.connect('amqp://localhost/'):
@@ -46,6 +49,7 @@ if __name__ == '__main__':
 ```
 
 Client (polling):
+
 ```python
 import asyncio
 
@@ -69,27 +73,31 @@ if __name__ == '__main__':
 ## Testing
 
 You need a running RabbitMQ server for testing. For example:
+
 ```bash
 docker run -it --network host rabbitmq
 ```
 
 Then, make sure that test dependencies are installed:
+
 ```bash
 pip install .[test]
 ```
 
 Finally, run the tests
+
 ```bash
 PYTHONPATH=. pytest beef/test
 ```
 
-
 ## Building
+
 ```bash
-python -m build --wheel
+pip wheel .
 ```
 
 ## Publishing
+
 ```bash
 twine upload dist/pybeef-XXX.whl -u __token__ -p <secret-pipy-token>
 ```

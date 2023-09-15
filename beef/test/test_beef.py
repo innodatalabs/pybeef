@@ -1,4 +1,4 @@
-from beef import beef, State
+from beef import beef, State, TaskNotFoundError
 import pytest
 import asyncio
 from beef.test.sample_workers import addition, multiplication, short_lived, universal
@@ -152,3 +152,46 @@ async def test_canceled(universal_server):
         assert status.body == 'go away, we do not need you'
 
     await asyncio.sleep(1.0)  # let the worker finish
+
+async def test_cleanup(universal_server):
+    # here queue does expire, because we connect to the sever after task reply timeout
+    async with universal.connect(url='amqp://localhost/'):
+        task_id = await universal.submit(ret=1)
+
+    await asyncio.sleep(0.2)
+    async with universal.connect(url='amqp://localhost/'):
+        status = await universal.get_status(task_id=task_id)
+        assert status.is_final
+        assert status.state == State.SUCCESS
+        assert status.body == 1
+
+    # check that final success state is still there
+    await asyncio.sleep(2.5)
+    async with universal.connect(url='amqp://localhost/'):
+        status = await universal.get_status(task_id=task_id)
+        assert status.is_final
+        assert status.state == State.SUCCESS
+        assert status.body == 1
+
+    async with universal.connect(url='amqp://localhost/'):
+        await universal.cleanup(task_id=task_id)
+
+    await asyncio.sleep(2.5)
+    async with universal.connect(url='amqp://localhost/'):
+        with pytest.raises(TaskNotFoundError):
+            await universal.get_status(task_id=task_id)
+
+async def test_with_name(multiplication_server):
+    # we use `addition` worker to triegger execution of multiplication worker
+    # by swapping queue name, temporarily
+    async with addition.connect(url='amqp://localhost/'):
+        with addition.with_name(multiplication.name):
+            task_id = await addition.submit(5, 6)
+
+    await asyncio.sleep(0.2)
+    async with addition.connect(url='amqp://localhost/'):
+        status = await addition.get_status(task_id=task_id)
+        assert status.is_final
+        assert status.state == State.SUCCESS
+        assert status.body == 30
+

@@ -114,6 +114,19 @@ class Beef:
             self._queue_name = inspect.getmodule(self.fn).__name__ + '.' + self.fn.__name__
         return self._queue_name
 
+    @name.setter
+    def name(self, value) -> None:
+        self._queue_name = value
+
+    @contextlib.contextmanager
+    def with_name(self, new_name) -> None:
+        old_name = self.name
+        self.name = new_name
+        try:
+            yield
+        finally:
+            self.name = old_name
+
     async def __call__(self, *av, **kaw) -> Any:
         return await self.fn(*av, **kaw)
 
@@ -193,6 +206,18 @@ class Beef:
         status = Status.canceled(task_id=task_id, message=message)
         async with self._acquire_channel() as channel:
             await self._set_status(channel, status)
+
+    async def cleanup(self, *, task_id: Optional[TaskID] = None) -> None:
+        '''
+        Cleanup resources
+
+        :param task_id: task id - can be omitted if called from within the worker function
+        '''
+        if task_id is None:
+            task_id = self._get_task_id()
+        async with self._acquire_channel() as channel:
+            queue = await channel.declare_queue(task_id, durable=True, arguments={'x-expires': self._reply_expiration_millis})
+            await queue.delete(if_empty=False, if_unused=False)
 
     async def result(self, *, task_id: Optional[TaskID] = None) -> Any:
         '''
