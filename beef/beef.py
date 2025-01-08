@@ -265,7 +265,6 @@ class Beef:
                     async with queue.iterator(no_ack=False, timeout=10) as queue_iter:
                         async for msg in queue_iter:
                             try:
-                                await msg.ack()
                                 task_id, av, kw = _message_to_work_request(msg)
                                 self._task_id.set(task_id)
 
@@ -286,6 +285,7 @@ class Beef:
                             finally:
                                 self._task_id.set(None)
 
+                            await msg.ack()
                             await self._set_status(channel, status)
 
     @contextlib.asynccontextmanager
