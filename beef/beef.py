@@ -268,8 +268,17 @@ class Beef:
                                 await msg.ack()
                                 task_id, av, kw = _message_to_work_request(msg)
                                 self._task_id.set(task_id)
-                                result = await self.fn(*av, **kw)
+
+                                result = await asyncio.wait_for(
+                                    self.fn(*av, **kw), 
+                                    timeout=self._reply_expiration_millis
+                                )
+
                                 status = Status.success(task_id=task_id, result=result)
+
+                            except asyncio.TimeoutError:
+                                print(f"Task {task_id} timed out", file=sys.stderr)
+                                status = Status.failure(task_id=task_id, error=f"Task timed out after {self._reply_expiration_millis / 1000:.2f} seconds")                            
                             except Exception as e:
                                 import traceback
                                 traceback.print_exc(file=sys.stderr)
