@@ -1,21 +1,7 @@
 from beef import beef, State, TaskNotFoundError
 import pytest
 import asyncio
-from beef.test.sample_workers import addition, multiplication, short_lived, universal
-import contextlib
-
-@contextlib.asynccontextmanager
-async def server(beef):
-    async def server():
-        async with beef.connect(url='amqp://localhost/'):
-            await beef.serve()
-
-    server_task = asyncio.create_task(server())
-
-    yield
-    server_task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await server_task
+from beef.test.sample_workers import addition, multiplication, short_lived, universal, server
 
 @pytest.fixture(scope='function')
 async def addition_server():
@@ -185,8 +171,7 @@ async def test_with_name(multiplication_server):
     # we use `addition` worker to triegger execution of multiplication worker
     # by swapping queue name, temporarily
     async with addition.connect(url='amqp://localhost/'):
-        with addition.with_name(multiplication.name):
-            task_id = await addition.submit(5, 6)
+        task_id = await addition.submit_to(multiplication.name, 5, 6)
 
     await asyncio.sleep(0.2)
     async with addition.connect(url='amqp://localhost/'):

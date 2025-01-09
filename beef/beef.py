@@ -98,6 +98,7 @@ class Beef:
         queue_name: Optional[str] = None,
         reply_expiration_millis = DEFAULT_REPLY_EXPIRATION_MILLIS,
         fast_forward_limit=1000,
+        call_timeout_seconds: Optional[float] = None,
     ):
         if not inspect.iscoroutinefunction(fn):
             raise ValueError('beef can only wrap async functions')
@@ -107,25 +108,13 @@ class Beef:
         self._queue_name = queue_name
         self._reply_expiration_millis = reply_expiration_millis
         self._fast_forward_limit = fast_forward_limit
+        self._call_timeout_seconds = call_timeout_seconds
 
     @property
     def name(self) -> str:
         if self._queue_name is None:
             self._queue_name = inspect.getmodule(self.fn).__name__ + '.' + self.fn.__name__
         return self._queue_name
-
-    @name.setter
-    def name(self, value) -> None:
-        self._queue_name = value
-
-    @contextlib.contextmanager
-    def with_name(self, new_name) -> None:
-        old_name = self.name
-        self.name = new_name
-        try:
-            yield
-        finally:
-            self.name = old_name
 
     async def __call__(self, *av, **kaw) -> Any:
         return await self.fn(*av, **kaw)
@@ -141,14 +130,32 @@ class Beef:
 
         :return: task id
         '''
+        return await self.submit_to(self.name, *av, **kw) 
+
+    async def submit_to(self, queue_name: str, *av, **kw) -> TaskID:
+        '''
+        Submit a task to be executed in background
+
+        This method requires active connection. see :meth:`connect`.
+
+        :param queue_name: name of the target queue
+        :param av: positional arguments
+        :param kw: keyword arguments
+
+        :return: task id
+        '''
         async with self._acquire_channel() as channel:
-            await channel.declare_queue(self.name, durable=True)
+            await channel.declare_queue(queue_name, durable=True, arguments={
+                'x-consumer-timeout': 30_001,
+            })
             task_id = str(uuid.uuid4())
-            await channel.declare_queue(task_id, durable=True, arguments={'x-expires': self._reply_expiration_millis})
+            await channel.declare_queue(task_id, durable=True, arguments={
+                'x-expires': self._reply_expiration_millis,
+            })
             await self._set_status(channel, Status.progress(task_id=task_id, steps=0, progress=-1))
             await channel.default_exchange.publish(
                 _work_request_to_message(task_id, *av, **kw),
-                routing_key=self.name,
+                routing_key=queue_name,
             )
             return task_id
 
@@ -261,18 +268,25 @@ class Beef:
                 # the looping with timeout hack
                 async with self._acquire_channel() as channel:
                     await channel.set_qos(prefetch_count=1)
-                    queue = await channel.declare_queue(self.name, durable=True)
+                    queue = await channel.declare_queue(self.name, durable=True, arguments={
+                        'x-consumer-timeout': 30_002,
+                    })
                     async with queue.iterator(no_ack=False, timeout=10) as queue_iter:
                         async for msg in queue_iter:
                             try:
                                 task_id, av, kw = _message_to_work_request(msg)
                                 self._task_id.set(task_id)
-                                result = await self.fn(*av, **kw)
+                                result = await asyncio.wait_for(
+                                    self.fn(*av, **kw),
+                                    timeout=self._call_timeout_seconds
+                                )
                                 status = Status.success(task_id=task_id, result=result)
                             except Exception as e:
                                 import traceback
                                 traceback.print_exc(file=sys.stderr)
                                 status = Status.failure(task_id=task_id, error=repr(e))
+                            except TimeoutError as e:
+                                status = Status.failure(task_id=task_id, error='Task timed out after %ss' % self._call_timeout_seconds)
                             finally:
                                 self._task_id.set(None)
 

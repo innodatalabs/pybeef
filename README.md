@@ -36,6 +36,7 @@ if __name__ == '__main__':
 ```
 
 Client (blocking):
+
 ```python
 async def client():
     async with add.connect('amqp://localhost/'):
@@ -87,7 +88,7 @@ pip install .[test]
 Finally, run the tests
 
 ```bash
-PYTHONPATH=. pytest beef/test
+python -m pytest beef/test
 ```
 
 ## Building
