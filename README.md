@@ -91,14 +91,26 @@ Finally, run the tests
 python -m pytest beef/test
 ```
 
+or
+
+```bash
+make test
+```
+
 ## Building
 
 ```bash
-pip wheel .
+pip wheel . --no-deps -w wheels/
+```
+
+or
+
+```bash
+make
 ```
 
 ## Publishing
 
 ```bash
-twine upload dist/pybeef-XXX.whl -u __token__ -p <secret-pipy-token>
+twine upload wheels/pybeef-XXX.whl -u __token__ -p <secret-pipy-token>
 ```
