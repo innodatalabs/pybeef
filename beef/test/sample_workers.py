@@ -18,14 +18,6 @@ async def short_lived(*, delay=None, exception=None, ret=None):
         raise exception
     return ret
 
-@beef(call_timeout_seconds=1.0)
-async def timeout_1s(*, delay=None, exception=None, ret=None):
-    if delay is not None:
-        await asyncio.sleep(delay)
-    if exception is not None:
-        raise exception
-    return ret
-
 @beef
 async def universal(*, delay=None, exception=None, ret=None):
     if delay is not None:
@@ -34,12 +26,11 @@ async def universal(*, delay=None, exception=None, ret=None):
         raise exception
     return ret
 
-
 @contextlib.asynccontextmanager
-async def server(beef):
+async def server(beef, *av, **kaw):
     async def server():
         async with beef.connect(url='amqp://localhost/'):
-            await beef.serve()
+            await beef.serve(*av, **kaw)
 
     server_task = asyncio.create_task(server())
 

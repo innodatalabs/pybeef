@@ -98,7 +98,6 @@ class Beef:
         queue_name: Optional[str] = None,
         reply_expiration_millis = DEFAULT_REPLY_EXPIRATION_MILLIS,
         fast_forward_limit=1000,
-        call_timeout_seconds: Optional[float] = None,
     ):
         if not inspect.iscoroutinefunction(fn):
             raise ValueError('beef can only wrap async functions')
@@ -108,7 +107,6 @@ class Beef:
         self._queue_name = queue_name
         self._reply_expiration_millis = reply_expiration_millis
         self._fast_forward_limit = fast_forward_limit
-        self._call_timeout_seconds = call_timeout_seconds
 
     @property
     def name(self) -> str:
@@ -252,11 +250,17 @@ class Beef:
                 return status.body
             raise RuntimeError(f'Unexpected final state {status}')
 
-    async def serve(self) -> NoReturn:
+    async def serve(self, task_timeout_seconds: Optional[float] = None, exit_on_task_timeout = False) -> NoReturn:
         '''
         Worker that executes the task.
 
-        This call block forever, waiting for incoming requests.
+        Normally, this call blocks forever, waiting for incoming requests.
+
+        :param: task_timeout_seconds (defaults to None) - can be used to limit wait for task completion. Client will receive an error.
+        :param: exit_on_task_timeout (faults to False) - set this if you want server to quit when task times out. Could be useful if
+            timed out task can not be gracefully cancelled. For example, a synchronous task looping forever can not be cancelled
+            with asyncio tools, and the best way out is to terminate the whole process and restart the server.
+
         '''
         while True:
             with contextlib.suppress(asyncio.TimeoutError):
@@ -269,25 +273,31 @@ class Beef:
                     queue = await channel.declare_queue(self.name, durable=True)
                     async with queue.iterator(no_ack=False, timeout=10) as queue_iter:
                         async for msg in queue_iter:
+                            seen_timeout = False
                             try:
                                 task_id, av, kw = _message_to_work_request(msg)
                                 self._task_id.set(task_id)
                                 result = await asyncio.wait_for(
                                     self.fn(*av, **kw),
-                                    timeout=self._call_timeout_seconds
+                                    timeout=task_timeout_seconds
                                 )
                                 status = Status.success(task_id=task_id, result=result)
+                            except asyncio.TimeoutError as e:
+                                status = Status.failure(task_id=task_id, error='Task timed out after %ss' % task_timeout_seconds)
+                                seen_timeout = True
                             except Exception as e:
                                 import traceback
                                 traceback.print_exc(file=sys.stderr)
                                 status = Status.failure(task_id=task_id, error=repr(e))
-                            except asyncio.TimeoutError as e:
-                                status = Status.failure(task_id=task_id, error='Task timed out after %ss' % self._call_timeout_seconds)
                             finally:
                                 self._task_id.set(None)
 
                             await self._set_status(channel, status)
                             await msg.ack()
+
+                            if exit_on_task_timeout and seen_timeout:
+                                print('Exiting server due to timeout (exit_on_timeout was set to True)', file=sys.stderr)
+                                return
 
     @contextlib.asynccontextmanager
     async def connect(self, url: str, max_channels=10) -> Pool:
