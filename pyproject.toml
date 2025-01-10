@@ -1,6 +1,6 @@
 [project]
 name = "pybeef"
-version = "0.0.13"
+version = "0.0.14"
 authors = [
     { name="Mike Kroutikov", email="mkroutikov@innodata.com" },
 ]
