@@ -281,7 +281,7 @@ class Beef:
                                 import traceback
                                 traceback.print_exc(file=sys.stderr)
                                 status = Status.failure(task_id=task_id, error=repr(e))
-                            except TimeoutError as e:
+                            except asyncio.TimeoutError as e:
                                 status = Status.failure(task_id=task_id, error='Task timed out after %ss' % self._call_timeout_seconds)
                             finally:
                                 self._task_id.set(None)
