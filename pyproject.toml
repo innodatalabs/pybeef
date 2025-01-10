@@ -1,6 +1,6 @@
 [project]
 name = "pybeef"
-version = "0.0.12"
+version = "0.0.13"
 authors = [
     { name="Mike Kroutikov", email="mkroutikov@innodata.com" },
 ]
@@ -26,9 +26,12 @@ test = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/innodatalabs/beef"
-"Bug Tracker" = "https://github.com/pypa/innodatalabs/beef"
+"Homepage" = "https://github.com/innodatalabs/pybeef"
+"Bug Tracker" = "https://github.com/pypa/innodatalabs/pybeef"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+    packages = ["beef"]

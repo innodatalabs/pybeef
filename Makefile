@@ -1,7 +1,10 @@
-.PHONY: all clean
+.PHONY: all test clean
 
-all:
-	pip wheel .
+all: test
+	pip wheel . --no-deps -w wheels/
+
+test:
+	python -m pytest beef/test
 
 clean:
-	rm -rf *.whl
+	rm -rf dist wheels

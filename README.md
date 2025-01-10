@@ -36,6 +36,7 @@ if __name__ == '__main__':
 ```
 
 Client (blocking):
+
 ```python
 async def client():
     async with add.connect('amqp://localhost/'):
@@ -87,17 +88,29 @@ pip install .[test]
 Finally, run the tests
 
 ```bash
-PYTHONPATH=. pytest beef/test
+python -m pytest beef/test
+```
+
+or
+
+```bash
+make test
 ```
 
 ## Building
 
 ```bash
-pip wheel .
+pip wheel . --no-deps -w wheels/
+```
+
+or
+
+```bash
+make
 ```
 
 ## Publishing
 
 ```bash
-twine upload dist/pybeef-XXX.whl -u __token__ -p <secret-pipy-token>
+twine upload wheels/pybeef-XXX.whl -u __token__ -p <secret-pipy-token>
 ```
