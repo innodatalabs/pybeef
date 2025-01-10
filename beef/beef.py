@@ -266,7 +266,7 @@ class Beef:
                 # the looping with timeout hack
                 async with self._acquire_channel() as channel:
                     await channel.set_qos(prefetch_count=1)
-                    queue = await channel.declare_queue(self.name, durable=True,)
+                    queue = await channel.declare_queue(self.name, durable=True)
                     async with queue.iterator(no_ack=False, timeout=10) as queue_iter:
                         async for msg in queue_iter:
                             try:
