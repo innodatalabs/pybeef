@@ -145,9 +145,7 @@ class Beef:
         :return: task id
         '''
         async with self._acquire_channel() as channel:
-            await channel.declare_queue(queue_name, durable=True, arguments={
-                'x-consumer-timeout': 30_001,
-            })
+            await channel.declare_queue(queue_name, durable=True)
             task_id = str(uuid.uuid4())
             await channel.declare_queue(task_id, durable=True, arguments={
                 'x-expires': self._reply_expiration_millis,
@@ -268,9 +266,7 @@ class Beef:
                 # the looping with timeout hack
                 async with self._acquire_channel() as channel:
                     await channel.set_qos(prefetch_count=1)
-                    queue = await channel.declare_queue(self.name, durable=True, arguments={
-                        'x-consumer-timeout': 30_002,
-                    })
+                    queue = await channel.declare_queue(self.name, durable=True,)
                     async with queue.iterator(no_ack=False, timeout=10) as queue_iter:
                         async for msg in queue_iter:
                             try:
